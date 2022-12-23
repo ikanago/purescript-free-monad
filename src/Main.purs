@@ -17,30 +17,41 @@ data Program1 a =
 doubleMemoryValue :: Program1 Unit
 doubleMemoryValue = CallSubroutineK (mkExists $ CallSubroutineK' {
   subroutine: ReadValue unit,
-  callback: (\initialValue ->
+  callback: \initialValue ->
     CallSubroutineK (mkExists $ CallSubroutineK' {
       subroutine: WriteValue initialValue,
-      callback: (\_writeResult ->
+      callback: \_writeResult ->
         Finish unit
-      )
     })
-  )
 })
 
 fourFoldMemoryValue :: Program1 Int
 fourFoldMemoryValue = CallSubroutineK (mkExists $ CallSubroutineK' {
   subroutine: doubleMemoryValue,
-  callback: (\_res1 ->
+  callback: \_res1 ->
     CallSubroutineK (mkExists $ CallSubroutineK' {
       subroutine: doubleMemoryValue,
-      callback: (\_res2 ->
+      callback: \_res2 ->
         CallSubroutineK (mkExists $ CallSubroutineK' {
           subroutine: ReadValue unit,
           callback: \finalValue -> Finish finalValue
         })
-      )
     })
-  )
+})
+
+useIf :: Program1 Unit
+useIf = CallSubroutineK (mkExists $ CallSubroutineK' {
+  subroutine: ReadValue unit,
+  callback: \value ->
+    CallSubroutineK (mkExists $ CallSubroutineK' {
+      subroutine: (
+        if value `mod` 2 == 0 then
+          WriteValue 0
+        else
+          WriteValue 1
+      ),
+      callback: \_res -> Finish unit
+    })
 })
 
 main :: Effect Unit
