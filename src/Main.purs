@@ -2,57 +2,49 @@ module Main where
 
 import Prelude
 
-import Data.Exists (Exists, mkExists)
 import Effect (Effect)
 import Effect.Console (log)
+import Program (Program(..), makeSubroutine)
 
-newtype CallSubroutineK' a b = CallSubroutineK' { subroutine :: Program1 b, callback :: (b -> Program1 a) }
-
-data Program1 a = 
-  Finish a
-  | ReadValue Unit
+data SingleMemoryInstruction :: Type -> Type
+data SingleMemoryInstruction r =
+  ReadValue Unit
   | WriteValue Int
-  | CallSubroutineK (Exists (CallSubroutineK' a))
 
-doubleMemoryValue :: Program1 Unit
-doubleMemoryValue = CallSubroutineK (mkExists $ CallSubroutineK' {
-  subroutine: ReadValue unit,
-  callback: \initialValue ->
-    CallSubroutineK (mkExists $ CallSubroutineK' {
-      subroutine: WriteValue initialValue,
-      callback: \_writeResult ->
-        Finish unit
-    })
-})
+doubleMemoryValue :: Program SingleMemoryInstruction Unit
+doubleMemoryValue = makeSubroutine {
+  subroutine: RunInstruction $ ReadValue unit,
+  callback: \initialValue -> makeSubroutine {
+    subroutine: RunInstruction $ WriteValue initialValue,
+    callback: \_writeResult -> Finish unit
+  }
+}
 
-fourFoldMemoryValue :: Program1 Int
-fourFoldMemoryValue = CallSubroutineK (mkExists $ CallSubroutineK' {
+fourFoldMemoryValue :: Program SingleMemoryInstruction Int
+fourFoldMemoryValue = makeSubroutine {
   subroutine: doubleMemoryValue,
-  callback: \_res1 ->
-    CallSubroutineK (mkExists $ CallSubroutineK' {
-      subroutine: doubleMemoryValue,
-      callback: \_res2 ->
-        CallSubroutineK (mkExists $ CallSubroutineK' {
-          subroutine: ReadValue unit,
-          callback: \finalValue -> Finish finalValue
-        })
-    })
-})
+  callback: \_res1 -> makeSubroutine {
+    subroutine: doubleMemoryValue,
+    callback: \_res2 -> makeSubroutine {
+      subroutine: RunInstruction (ReadValue unit),
+      callback: \finalValue -> Finish finalValue
+    }
+  }
+}
 
-useIf :: Program1 Unit
-useIf = CallSubroutineK (mkExists $ CallSubroutineK' {
-  subroutine: ReadValue unit,
-  callback: \value ->
-    CallSubroutineK (mkExists $ CallSubroutineK' {
-      subroutine: (
-        if value `mod` 2 == 0 then
-          WriteValue 0
-        else
-          WriteValue 1
-      ),
-      callback: \_res -> Finish unit
-    })
-})
+useIf :: Program SingleMemoryInstruction Unit
+useIf = makeSubroutine {
+  subroutine: RunInstruction (ReadValue unit),
+  callback: \value -> makeSubroutine {
+    subroutine: (
+      if value `mod` 2 == 0 then
+        RunInstruction (WriteValue 0)
+      else
+        RunInstruction (WriteValue 1)
+    ),
+    callback: \_res -> Finish unit
+  }
+}
 
 main :: Effect Unit
 main = do
