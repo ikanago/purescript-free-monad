@@ -4,49 +4,36 @@ import Prelude
 
 import Effect (Effect)
 import Effect.Console (log)
-import Program (Program(..), makeSubroutine)
+import Program (Program(..), SingleMemoryInstruction(..))
 
-data SingleMemoryInstruction :: Type -> Type
-data SingleMemoryInstruction r =
-  ReadValue Unit
-  | WriteValue Int
+doubleMemoryValue :: Program Int
+doubleMemoryValue = do
+  value <- Operation $ Read pure
+  _ <- Operation $ Write (value * 2) pure
+  value2 <- Operation $ Read pure
+  pure value2
 
-doubleMemoryValue :: Program SingleMemoryInstruction Unit
-doubleMemoryValue = makeSubroutine {
-  subroutine: RunInstruction $ ReadValue unit,
-  callback: \initialValue -> makeSubroutine {
-    subroutine: RunInstruction $ WriteValue initialValue,
-    callback: \_writeResult -> Finish unit
-  }
-}
+d =
+  Operation (Read pure) >>= \value2 ->
+  Operation (Write (value2 * 2) pure) >>= \_ ->
+  pure unit
 
-fourFoldMemoryValue :: Program SingleMemoryInstruction Int
-fourFoldMemoryValue = makeSubroutine {
-  subroutine: doubleMemoryValue,
-  callback: \_res1 -> makeSubroutine {
-    subroutine: doubleMemoryValue,
-    callback: \_res2 -> makeSubroutine {
-      subroutine: RunInstruction (ReadValue unit),
-      callback: \finalValue -> Finish finalValue
-    }
-  }
-}
+-- e1 = Operation (Read pure) >>= pure
+-- e2 = Opeation $ mapF (bindFlipped pure) (Read pure)
+-- e3 = Operation $ Read $ pure >>> (bindFlipped pure)
 
-useIf :: Program SingleMemoryInstruction Unit
-useIf = makeSubroutine {
-  subroutine: RunInstruction (ReadValue unit),
-  callback: \value -> makeSubroutine {
-    subroutine: (
-      if value `mod` 2 == 0 then
-        RunInstruction (WriteValue 0)
-      else
-        RunInstruction (WriteValue 1)
-    ),
-    callback: \_res -> Finish unit
-  }
-}
+interpretSingleMemoryInstruction :: forall a. SingleMemoryInstruction a -> Program a
+interpretSingleMemoryInstruction inst = case inst of
+  Read k -> k 1
+  Write v k -> k unit
+
+interpret :: forall a. (SingleMemoryInstruction a -> Program a) -> Program a -> a
+interpret interpretOp program = case program of
+  Finish v -> v
+  Operation op -> interpretOp >>> (interpret interpretOp) $ op
 
 main :: Effect Unit
 main = do
   let p = doubleMemoryValue
-  log "🍝"
+  let r = interpret interpretSingleMemoryInstruction p
+  log $ show r
